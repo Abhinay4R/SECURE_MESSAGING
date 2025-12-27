@@ -1,135 +1,29 @@
-#include <iostream>
-#include <string>
-#include <cstring>
-#include <fstream>
-#include <vector>
-#include <algorithm>
-#include <map>
-#include <stdexcept>
+#include "Bigint.hpp"
+#include "exceptions.hpp"
+#include "Timer.hpp"
 
-
-constexpr const char* LOOKUP_FILE = "numberstorage";
-constexpr const char* HEX_DIGIT_STR = "0123456789abcdef";
-constexpr int MAX_DIGITS = 618;
-constexpr int HEX_SIZE = 64;
-constexpr int MAX_HEX_RESULT_SIZE = 128;
-constexpr int HEX_LOOKUP_SIZE = 256;
-constexpr int MAX_BINARY_SIZE = 1024;
-constexpr int MAX_BINARY_RESULT_SIZE = 2048;
-constexpr int KARATSUBA_THRESHOLD = 4;
-
-// Custom Exception Classes
-class BigIntException : public std::exception {
-protected:
-    std::string message;
-public:
-    BigIntException(const std::string& msg) : message(msg) {}
-    virtual const char* what() const noexcept override {
-        return message.c_str();
-    }
-};
-
-class DivisionByZeroException : public BigIntException {
-public:
-    DivisionByZeroException() : BigIntException("Division by zero is not allowed") {}
-};
-
-class InvalidInputException : public BigIntException {
-public:
-    InvalidInputException(const std::string& input) 
-        : BigIntException("Invalid input: " + input) {}
-};
-
-class OverflowException : public BigIntException {
-public:
-    OverflowException(const std::string& operation) 
-        : BigIntException("Overflow occurred during " + operation) {}
-};
-
-class FileIOException : public BigIntException {
-public:
-    FileIOException(const std::string& filename, const std::string& operation) 
-        : BigIntException("File I/O error: Cannot " + operation + " file " + filename) {}
-};
-
-class BigInt {
-public:
-    char digits[MAX_DIGITS];
-    int length;
-    bool isNegative;
-
-    BigInt() : length(0), isNegative(false) {
+//constructors
+BigInt::BigInt() : length(0), isNegative(false) {
         std::fill(digits, digits + MAX_DIGITS, 0);
-    }
+}
 
-    BigInt(const std::string& str) {
+BigInt::BigInt(const std::string& str) {
         *this = createFromString(str);
-    }
+}
 
-    static BigInt createFromString(const std::string& str);
-    BigInt operator+(const BigInt& other) const;
-    BigInt operator-(const BigInt& other) const;
-    BigInt operator*(const BigInt& other) const;
-    int compare(const BigInt& other) const;
-    void print() const;
-    static bool isValidInput(const std::string& str);
-};
-
-class BigHexInt {
-public:
-    char digits[MAX_HEX_RESULT_SIZE];
-    int length;
-    bool isNegative;
-
-    BigHexInt() : length(1), isNegative(false) {
+BigHexInt::BigHexInt() : length(1), isNegative(false) {
         std::fill(digits, digits + MAX_HEX_RESULT_SIZE, '0');
-    }
+}
 
-    BigHexInt(const std::string& str) {
+BigHexInt::BigHexInt(const std::string& str) {
         *this = createFromString(str);
-    }
+}
 
-    static BigHexInt createFromString(const std::string& str);
-    BigHexInt operator+(const BigHexInt& other) const;
-    BigHexInt operator-(const BigHexInt& other) const;
-    BigHexInt operator*(const BigHexInt& other) const;
-    BigHexInt operator/(const BigHexInt& other) const;
-    BigHexInt operator%(const BigHexInt& other) const;
-    
-    int compare(const BigHexInt& other) const;
-    void print() const;
-    static bool isValidInput(const std::string& str);
-    
-    // Helper methods
-    BigHexInt clone() const;
-    BigHexInt shiftLeft(int n) const;
-    void shiftLeftInPlace(int n);
-    BigHexInt getLower(int n) const;
-    BigHexInt getHigher(int n) const;
-    BigHexInt pad(int targetLen) const;
-    bool isZero() const;
-    bool isOne() const;
-    bool isGreaterOrEqual(const BigHexInt& other) const;
-    std::string toString() const;
-
-private:
-    BigHexInt multiplyNaive(const BigHexInt& other) const;
-    BigHexInt karatsuba(const BigHexInt& other) const;
-    BigHexInt divide(const BigHexInt& divisor, BigHexInt* remainder = nullptr) const;
-};
-
-// Global memoization map for Karatsuba multiplication
+// Global variable definitions
 std::map<std::pair<std::string, std::string>, std::string> karatsubaMemo;
-
-// Global lookup table for isHex multiplication
 int hexMultiplyLookup[HEX_LOOKUP_SIZE][HEX_LOOKUP_SIZE];
 
-// Utility functions
-int convertHexDigitToInt(char c);
-char convertIntToHexChar(int n);
-void initializeLookupTable();
-void closeAndUpdateFile();
-std::pair<std::string, std::string> getTwoValidNumbers();
+
 
 //-------------------- DECIMAL BIGINT IMPLEMENTATION --------------------//
 
@@ -204,7 +98,7 @@ BigInt BigInt::operator+(const BigInt& other) const {
                       (i < other.length ? other.digits[i] : 0) + carry;
             result.digits[i] = sum % 10;
             carry = sum / 10;
-            if (i >= result.length) {
+            if (i == result.length) {                  //<-changed the >= to == need to check if it works 
                 result.length++;
             }
         }
@@ -678,12 +572,12 @@ BigHexInt BigHexInt::operator*(const BigHexInt& other) const {
     BigHexInt result;
     
     // Use Karatsuba for larger numbers (when combined length > 24)
-    if (length + other.length > 8) {
-        result = karatsuba(other);
-    } else {
-        result = multiplyNaive(other);
-    }
-    
+    // if (length + other.length > 8) {
+    //     result = karatsuba(other);
+    // } else {
+    //     result = multiplyNaive(other);
+    // }
+    result = karatsuba(other);
     result.isNegative = isNegative != other.isNegative;
     return result;
 }
@@ -703,35 +597,149 @@ bool BigHexInt::isGreaterOrEqual(const BigHexInt& other) const {
     return true;  // Equal
 }
 
+// BigHexInt BigHexInt::divide(const BigHexInt& divisor, BigHexInt* remainder) const {
+//     if (divisor.isZero()) {
+//         throw DivisionByZeroException();
+//     }
+    
+//     BigHexInt quotient;
+//     std::fill(quotient.digits, quotient.digits + MAX_HEX_RESULT_SIZE, '0');
+//     quotient.length = 1;
+//     quotient.isNegative = isNegative != divisor.isNegative;
+    
+//     int cmp = compare(divisor);
+//     if (cmp == 0) {
+//         quotient.digits[0] = '1';
+//         if (remainder != nullptr) {
+//             std::fill(remainder->digits, remainder->digits + MAX_HEX_RESULT_SIZE, '0');
+//             remainder->length = 1;
+//             remainder->isNegative = false;
+//         }
+//         return quotient;
+//     } else if ((cmp < 0 && !isNegative && !divisor.isNegative) || 
+//                (cmp > 0 && isNegative && divisor.isNegative)) {
+//         quotient.digits[0] = '0';
+//         if (remainder != nullptr) {
+//             *remainder = *this;
+//         }
+//         return quotient;
+//     }
+    
+//     // Simplified division - for full implementation, proper long division needed
+//     return quotient;
+// }
+
 BigHexInt BigHexInt::divide(const BigHexInt& divisor, BigHexInt* remainder) const {
     if (divisor.isZero()) {
         throw DivisionByZeroException();
     }
     
+    // Handle division by zero case
+    if (this->isZero()) {
+        BigHexInt zero;
+        if (remainder != nullptr) {
+            *remainder = zero;
+        }
+        return zero;
+    }
+    
+    // Create absolute values for calculation
+    BigHexInt dividend = *this;
+    BigHexInt divisorAbs = divisor;
+    dividend.isNegative = false;
+    divisorAbs.isNegative = false;
+    
+    // Initialize quotient
     BigHexInt quotient;
     std::fill(quotient.digits, quotient.digits + MAX_HEX_RESULT_SIZE, '0');
     quotient.length = 1;
-    quotient.isNegative = isNegative != divisor.isNegative;
+    quotient.isNegative = this->isNegative != divisor.isNegative;
     
-    int cmp = compare(divisor);
+    // Quick comparison checks
+    int cmp = dividend.compare(divisorAbs);
     if (cmp == 0) {
+        // dividend equals divisor
         quotient.digits[0] = '1';
+        quotient.length = 1;
         if (remainder != nullptr) {
             std::fill(remainder->digits, remainder->digits + MAX_HEX_RESULT_SIZE, '0');
             remainder->length = 1;
             remainder->isNegative = false;
         }
         return quotient;
-    } else if ((cmp < 0 && !isNegative && !divisor.isNegative) || 
-               (cmp > 0 && isNegative && divisor.isNegative)) {
+    } else if (cmp < 0) {
+        // dividend < divisor
         quotient.digits[0] = '0';
+        quotient.length = 1;
+        quotient.isNegative = false;
         if (remainder != nullptr) {
             *remainder = *this;
         }
         return quotient;
     }
     
-    // Simplified division - for full implementation, proper long division needed
+    // Perform long division
+    BigHexInt currentDividend;
+    std::fill(currentDividend.digits, currentDividend.digits + MAX_HEX_RESULT_SIZE, '0');
+    currentDividend.length = 1;
+    currentDividend.isNegative = false;
+    
+    std::fill(quotient.digits, quotient.digits + MAX_HEX_RESULT_SIZE, '0');
+    int quotientPos = 0;
+    
+    // Process each digit of the dividend from left to right
+    for (int i = dividend.length - 1; i >= 0; i--) {
+        // Shift current dividend left and add next digit
+        if (!currentDividend.isZero()) {
+            // Shift left by one hex digit
+            for (int j = currentDividend.length; j > 0; j--) {
+                currentDividend.digits[j] = currentDividend.digits[j-1];
+            }
+            currentDividend.digits[0] = dividend.digits[i];
+            currentDividend.length++;
+        } else {
+            // First non-zero digit
+            currentDividend.digits[0] = dividend.digits[i];
+            currentDividend.length = 1;
+        }
+        
+        // Find how many times divisor goes into current dividend
+        int count = 0;
+        while (currentDividend.compare(divisorAbs) >= 0) {
+            // Subtract divisor from current dividend
+            BigHexInt temp = currentDividend - divisorAbs;
+            currentDividend = temp;
+            count++;
+        }
+        
+        // Store the count in quotient
+        if (count > 0 || quotientPos > 0) {
+            quotient.digits[quotientPos] = convertIntToHexChar(count);
+            quotientPos++;
+        }
+    }
+    
+    // Set quotient length and handle case where quotient is zero
+    if (quotientPos == 0) {
+        quotient.digits[0] = '0';
+        quotient.length = 1;
+        quotient.isNegative = false;
+    } else {
+        quotient.length = quotientPos;
+        // Reverse the quotient digits since we built it backwards
+        for (int i = 0; i < quotient.length / 2; i++) {
+            char temp = quotient.digits[i];
+            quotient.digits[i] = quotient.digits[quotient.length - 1 - i];
+            quotient.digits[quotient.length - 1 - i] = temp;
+        }
+    }
+    
+    // Set remainder if requested
+    if (remainder != nullptr) {
+        *remainder = currentDividend;
+        remainder->isNegative = this->isNegative && !remainder->isZero();
+    }
+    
     return quotient;
 }
 
@@ -809,8 +817,7 @@ void initializeLookupTable() {
     }
 }
 
-//NEED MORE CACHE FRIENDLY READS
-// SORT AND UPDATE  
+
 void closeAndUpdateFile() {
     try {
         std::cout << "Updating memoization file..." << std::endl;
@@ -870,72 +877,208 @@ std::pair<std::string, std::string> getTwoValidNumbers() {
     
     return std::make_pair(num1, num2);
 }
+// //Timer testing 
+// void test_Bigdata_Hex(char operation)
+// {
+//    switch(operation)
+//    {
+//     case '+':
+//         {
+//             //open BigDataAdd.txt
+//             //each line contains two Hexadecimal numbers seperated by';'
+//             //read all these into std::vector<std::pair<std::string, std::string>> TestData
+//             //Call a function that initialises our timer.
+//             //Timer initialisation uis simply ' Timer t("Hexadecimal Addition: "); '
+//             //The timer is custom written and it is Scope based Thats why calling a new function
+//             //BigDataAdd contains many lines in the scale of 10,000
+//             //and this code im using for benchmarking
+//         }
+//    }
+//    //same goes for case "-", case"*""
+// }
+
+// int main() {
+//     try {
+//         std::atexit(closeAndUpdateFile);
+//         initializeLookupTable();
+
+//         bool isHex=true;
+//         char hexchar;
+//         std::cout<<"Input Y or y if the numbers are isHex"<<std::endl;
+//         std::cin>>hexchar;
+
+//         isHex = ( hexchar== 'Y' || hexchar == 'y');
+//         int test_cases;
+//         std::cin >> test_cases;
+//         std::cin.ignore(); // Clear newline
+
+//         for (int t = 0; t < test_cases; ++t) {
+//             char op;
+//             std::string num1, num2;
+
+//             std::cin >> op;
+//             std::cin >> num1 >> num2;
 
 
+//             try {
+//                 if (isHex) {
+//                     BigHexInt a(num1), b(num2), result;
+//                     switch (op) {
+//                         case '+': 
+//                         {
+//                             Timer t("Hexadecimal Addition: ");
+//                             result = a + b;
+//                             break;
+//                         }
+//                         case '-': 
+//                         {
+//                             Timer t("Hexadecimal Subtraction");
+//                             result = a - b;
+//                             break;
+//                         }
 
-int main() {
-    try {
-        std::atexit(closeAndUpdateFile);
-        initializeLookupTable();
+//                         case '*': result = a * b; break;
+//                         case '/': result = a / b; break;
+//                         case '%': result = a % b; break;
+//                         default:
+//                             std::cout << "Invalid operator: " << op << "\n";
+//                             continue;
+//                     }
+//                     result.print();
+//                 } else {
+//                     BigInt a(num1), b(num2), result;
+//                     switch (op) {
+//                         case '+': result = a + b; break;
+//                         case '-': result = a - b; break;
+//                         case '*': result = a * b; break;
+//                         case '/':
+//                         case '%':
+//                             std::cout << "Division/Modulo only supported for hexadecimal.\n";
+//                             continue;
+//                         default:
+//                             std::cout << "Invalid operator: " << op << "\n";
+//                             continue;
+//                     }
+//                     result.print();
+//                 }
+//             }
+//             catch (const BigIntException& e) {
+//                 std::cout << "Error: " << e.what() << "\n";
+//             }
+//         }
+//     }
+//     catch (const std::exception& e) {
+//         std::cerr << "Fatal error: " << e.what() << "\n";
+//         return 1;
+//     }
 
-        bool isHex=true;
-        char hexchar;
-        // std::cout<<"Input Y or y if the numbers are isHex"<<std::endl;
-        std::cin>>hexchar;
+//     return 0;
+// }
+BigHexInt BigHexInt::modPow(const BigHexInt& exponent, const BigHexInt& modulus) const {
+    // Handle edge cases
+    if (modulus.isZero()) {
+        throw std::invalid_argument("Modulus cannot be zero");
+    }
+    
+    if (modulus.isOne()) {
+        return BigHexInt("0"); // Any number mod 1 is 0
+    }
+    
+    if (exponent.isZero()) {
+        return BigHexInt("1"); // Any number^0 is 1
+    }
+    
+    if (this->isZero()) {
+        return BigHexInt("0"); // 0^n is 0 for n > 0
+    }
+    
+    // Handle negative exponents (not typically supported in modular arithmetic)
+    if (exponent.isNegative) {
+        throw std::invalid_argument("Negative exponents not supported in modular exponentiation");
+    }
+    
+    // Convert base to positive and take mod
+    BigHexInt base = *this;
+    if (base.isNegative) {
+        // Convert negative base to positive equivalent in modular arithmetic
+        base.isNegative = false;
+        BigHexInt temp = base % modulus;
+        base = modulus - temp;
+    } else {
+        base = base % modulus;
+    }
+    
+    if (base.isZero()) {
+        return BigHexInt("0");
+    }
+    
+    BigHexInt result("1");
+    BigHexInt exp = exponent;
+    
+    // Binary exponentiation with modular reduction
+    while (!exp.isZero()) {
+        // If exponent is odd, multiply result by current base
+        if (exp.isOdd()) {
+            result = (result * base) % modulus;
+        }
+        
+        // Square the base and halve the exponent
+        base = (base * base) % modulus;
+        exp = exp.divideByTwo();
+    }
+    
+    return result;
+}
+bool BigHexInt::isOdd() const {
+    if (length == 0) return false;
+    
+    // Check the least significant digit
+    char lastDigit = digits[0];
+    int lastDigitValue = convertHexDigitToInt(lastDigit);
+    
+    return (lastDigitValue & 1) == 1;
+}
 
-        isHex = ( hexchar== 'Y' || hexchar == 'y');
-        int test_cases;
-        std::cin >> test_cases;
-        std::cin.ignore(); // Clear newline
-
-        for (int t = 0; t < test_cases; ++t) {
-            char op;
-            std::string num1, num2;
-
-            std::cin >> op;
-            std::cin >> num1 >> num2;
-
-
-            try {
-                if (isHex) {
-                    BigHexInt a(num1), b(num2), result;
-                    switch (op) {
-                        case '+': result = a + b; break;
-                        case '-': result = a - b; break;
-                        case '*': result = a * b; break;
-                        case '/': result = a / b; break;
-                        case '%': result = a % b; break;
-                        default:
-                            std::cout << "Invalid operator: " << op << "\n";
-                            continue;
-                    }
-                    result.print();
-                } else {
-                    BigInt a(num1), b(num2), result;
-                    switch (op) {
-                        case '+': result = a + b; break;
-                        case '-': result = a - b; break;
-                        case '*': result = a * b; break;
-                        case '/':
-                        case '%':
-                            std::cout << "Division/Modulo only supported for hexadecimal.\n";
-                            continue;
-                        default:
-                            std::cout << "Invalid operator: " << op << "\n";
-                            continue;
-                    }
-                    result.print();
-                }
-            }
-            catch (const BigIntException& e) {
-                std::cout << "Error: " << e.what() << "\n";
-            }
+// Helper function to divide a BigHexInt by 2 (right shift by 1 bit)
+BigHexInt BigHexInt::divideByTwo() const {
+    if (isZero()) {
+        return BigHexInt("0");
+    }
+    
+    BigHexInt result;
+    std::fill(result.digits, result.digits + MAX_HEX_RESULT_SIZE, '0');
+    result.isNegative = isNegative;
+    
+    int carry = 0;
+    int resultLength = 0;
+    
+    // Process digits from most significant to least significant
+    for (int i = length - 1; i >= 0; i--) {
+        int digitValue = convertHexDigitToInt(digits[i]);
+        digitValue += carry * 16; // Add carry from previous position
+        
+        int newDigit = digitValue / 2;
+        carry = digitValue % 2;
+        
+        if (newDigit > 0 || resultLength > 0) {
+            result.digits[resultLength] = convertIntToHexChar(newDigit);
+            resultLength++;
         }
     }
-    catch (const std::exception& e) {
-        std::cerr << "Fatal error: " << e.what() << "\n";
-        return 1;
+    
+    if (resultLength == 0) {
+        result.digits[0] = '0';
+        result.length = 1;
+        result.isNegative = false;
+    } else {
+        result.length = resultLength;
+        // Reverse the result since we built it backwards
+        for (int i = 0; i < result.length / 2; i++) {
+            char temp = result.digits[i];
+            result.digits[i] = result.digits[result.length - 1 - i];
+            result.digits[result.length - 1 - i] = temp;
+        }
     }
-
-    return 0;
+    
+    return result;
 }
